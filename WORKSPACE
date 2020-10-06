@@ -12,18 +12,18 @@ http_archive(
 
 rules_scala_version="a2f5852902f5b9f0302c727eead52ca2c7b6c3e2" # update this as needed
 
-# http_archive(
-#     name = "io_bazel_rules_scala",
-#     strip_prefix = "rules_scala-%s" % rules_scala_version,
-#     type = "zip",
-#     url = "https://github.com/bazelbuild/rules_scala/archive/%s.zip" % rules_scala_version,
-#     sha256 = "725b00465b83b776b5ad22eada026c3546df635c",
-# )
-
-local_repository(
+http_archive(
     name = "io_bazel_rules_scala",
-    path = "../bazelbuild/rules_scala"
+    strip_prefix = "rules_scala-%s" % rules_scala_version,
+    type = "zip",
+    url = "https://github.com/bazelbuild/rules_scala/archive/%s.zip" % rules_scala_version,
+    sha256 = "8c48283aeb70e7165af48191b0e39b7434b0368718709d1bced5c3781787d8e7",
 )
+
+# local_repository(
+#     name = "io_bazel_rules_scala",
+#     path = "../bazelbuild/rules_scala"
+# )
 
 # load("@io_bazel_rules_scala//:version.bzl", "bazel_version")
 # bazel_version(name = "bazel_version")
@@ -50,14 +50,9 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 protobuf_deps()
 
 
-# For bazel-deps
-load("//3rdparty:workspace.bzl", "maven_dependencies")
-maven_dependencies()
-load("//3rdparty:target_file.bzl", "build_external_workspace")
-build_external_workspace(name = "third_party")
-
-load("//:deps.bzl", "all_deps")
-all_deps()
-load("@maven//:deps.bzl", "load_http_files")
-load_http_files()
+# For bazel-multideps
+load("//:3rdparty/jvm_deps.bzl", "jvm_deps")
+jvm_deps()
+load("@maven//:jvm_deps.bzl", "load_jvm_deps")
+load_jvm_deps()
 

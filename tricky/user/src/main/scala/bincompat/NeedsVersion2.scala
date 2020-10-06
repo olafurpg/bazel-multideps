@@ -1,5 +1,6 @@
 package bincompat
 
-object NeedsVersion 2 extends App {
-  new CrossBuild().run()
+object NeedsVersion2 extends App {
+  CrossBuild.run()
+  println(LibraryTrait.version2)
 }

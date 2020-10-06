@@ -1,5 +1,5 @@
 package bincompat
 
-class CrossBuild extends LibraryTrait {
-  def run(): Unit = defaultValues()
+object CrossBuild {
+  def run(): Unit = LibraryTrait.defaultValues()
 }

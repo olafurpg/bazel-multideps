@@ -1,0 +1,10 @@
+Trying a new strategy to reconcile versions.
+
+* do an isolated resolution for every explicitly declared dependency
+* collect all resolved artifacts by their module
+* report errors on any conflicting versions in implicit transitive dependencies
+* generate Bazel cross-build from library dependency graph that doesn't violate
+  constraints like "no duplicate versions of a given module on the same
+  classpath"
+
+This avoids the concept of a "default resolution" since we do an independent resolution for every declared dependency.

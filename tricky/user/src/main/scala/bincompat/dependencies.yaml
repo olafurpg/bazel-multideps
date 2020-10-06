@@ -1,0 +1,4 @@
+com.google:
+  guava:
+    old: 25
+    default: 30

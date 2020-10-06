@@ -1,0 +1,18 @@
+scala: 2.12.12
+dependencies:
+  - dependency: com.google.guava:guava:24.1.1-jre
+    crossVersions:
+      - name: lsp4j
+        version: 27.1-jre
+      - name: new
+        version: 29.0-jre
+      # - name: spark
+      #   version: 16.0.1
+  - dependency: org.eclipse.lsp4j:org.eclipse.lsp4j:0.9.0
+  - dependency: com.google.protobuf:protobuf-java:3.13.0
+    crossVersions:
+      - name: old
+        version: 2.6.1
+  #     - name: spark
+  #       version: 2.5.0
+  # - dependency: org.apache.spark:spark-core_2.12:3.0.1

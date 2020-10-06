@@ -1,6 +1,5 @@
-
 def _http_files_impl(ctx):
-    content = """
+    content = '''
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 def load_http_files():
@@ -10,9 +9,9 @@ def load_http_files():
       sha256 = "d1a7a7ef14b3db5c0fc3e0a63a81b374b510afe85add9f7984b97911f4c70605",
     )
 
-"""
+'''
     ctx.file("deps.bzl", content, executable = False)
-    build_content = """
+    build_content = '''
 package(default_visibility = [\"//visibility:public\"])
 
 genrule(
@@ -26,7 +25,7 @@ java_import(
   name = "org_mockito_mockito_all_1_10_19",
   jars = ["@maven//:v1/org_mockito_mockito_all_1_10_19.jar"],
 )
-"""
+'''
     ctx.file("BUILD", build_content, executable = False)
 
 http_files = repository_rule(
