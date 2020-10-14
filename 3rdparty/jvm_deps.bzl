@@ -5,6 +5,16 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
 def load_jvm_deps():
     http_file(
+      name = "com.google.protobuf_protobuf-java_3.13.0",
+      urls = ["https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.13.0/protobuf-java-3.13.0.jar"],
+      sha256 = "97d5b2758408690c0dc276238707492a0b6a4d71206311b6c442cdc26c5973ff"
+    )
+    http_file(
+      name = "com.google.protobuf_protobuf-java_2.6.1",
+      urls = ["https://repo1.maven.org/maven2/com/google/protobuf/protobuf-java/2.6.1/protobuf-java-2.6.1.jar"],
+      sha256 = "55aa554843983f431df5616112cf688d38aa17c132357afd1c109435bfdac4e6"
+    )
+    http_file(
       name = "com.google.guava_guava_24.1.1-jre",
       urls = ["https://repo1.maven.org/maven2/com/google/guava/guava/24.1.1-jre/guava-24.1.1-jre.jar"],
       sha256 = "490c16878c7a2c22e136728ad473c4190b21b82b46e261ba84ad2e4a5c28fbcf"
@@ -155,6 +165,36 @@ def load_jvm_deps():
 load("@io_bazel_rules_scala//scala:scala_import.bzl", "scala_import")
 
 genrule(
+  name = "com.google.protobuf_protobuf-java_3.13.0_extension",
+  srcs = ["@com.google.protobuf_protobuf-java_3.13.0//file"],
+  outs = ["@maven//:com.google.protobuf/protobuf-java-3.13.0.jar"],
+  cmd = "cp $< $@"
+)
+scala_import(
+  name = "com.google.protobuf_protobuf-java_3.13.0",
+  jars = ["@maven//:com.google.protobuf/protobuf-java-3.13.0.jar"],
+  deps = [],
+  exports = [],
+  tags = ["jvm_module=com.google.protobuf:protobuf-java", "jvm_version=3.13.0"],
+  visibility = ["//visibility:public"]
+)
+
+genrule(
+  name = "com.google.protobuf_protobuf-java_2.6.1_extension",
+  srcs = ["@com.google.protobuf_protobuf-java_2.6.1//file"],
+  outs = ["@maven//:com.google.protobuf/protobuf-java-2.6.1.jar"],
+  cmd = "cp $< $@"
+)
+scala_import(
+  name = "com.google.protobuf_protobuf-java_2.6.1",
+  jars = ["@maven//:com.google.protobuf/protobuf-java-2.6.1.jar"],
+  deps = [],
+  exports = [],
+  tags = ["jvm_module=com.google.protobuf:protobuf-java", "jvm_version=2.6.1"],
+  visibility = ["//visibility:public"]
+)
+
+genrule(
   name = "com.google.guava_guava_24.1.1-jre_extension",
   srcs = ["@com.google.guava_guava_24.1.1-jre//file"],
   outs = ["@maven//:com.google.guava/guava-24.1.1-jre.jar"],
@@ -165,11 +205,13 @@ scala_import(
   jars = ["@maven//:com.google.guava/guava-24.1.1-jre.jar"],
   deps = [
     "com.google.code.findbugs_jsr305_1.3.9", "org.checkerframework_checker-compat-qual_2.0.0",
-    "com.google.j2objc_j2objc-annotations_1.1", "org.codehaus.mojo_animal-sniffer-annotations_1.14"
+    "com.google.errorprone_error_prone_annotations_2.1.3", "com.google.j2objc_j2objc-annotations_1.1",
+    "org.codehaus.mojo_animal-sniffer-annotations_1.14"
   ],
   exports = [
     "com.google.code.findbugs_jsr305_1.3.9", "org.checkerframework_checker-compat-qual_2.0.0",
-    "com.google.j2objc_j2objc-annotations_1.1", "org.codehaus.mojo_animal-sniffer-annotations_1.14"
+    "com.google.errorprone_error_prone_annotations_2.1.3", "com.google.j2objc_j2objc-annotations_1.1",
+    "org.codehaus.mojo_animal-sniffer-annotations_1.14"
   ],
   tags = ["jvm_module=com.google.guava:guava", "jvm_version=24.1.1-jre"],
   visibility = ["//visibility:public"]

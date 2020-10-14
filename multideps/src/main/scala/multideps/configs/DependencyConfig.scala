@@ -31,6 +31,7 @@ final case class DependencyConfig(
     lang: LanguagesConfig = JavaLanguagesConfig,
     exports: List[String] = Nil,
     targets: List[String] = Nil,
+    versionScheme: Option[String] = None,
     force: Boolean = false
 ) {
   def coursierModule(scalaVersion: VersionsConfig): Module = {

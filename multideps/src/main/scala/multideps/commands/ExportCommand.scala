@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
 import java.{util => ju}
+import coursier.version.VersionCompatibility
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
@@ -88,6 +89,15 @@ case class ExportCommand(
       ThirdpartyConfig.parseYaml(Input.path(configPath))
     }
   }
+
+  private val schemes = Map[VersionCompatibility, String](
+    VersionCompatibility.Always -> "always",
+    VersionCompatibility.Default -> "default",
+    VersionCompatibility.EarlySemVer -> "early-semver",
+    VersionCompatibility.SemVerSpec -> "semver-spec",
+    VersionCompatibility.PackVer -> "pvp",
+    VersionCompatibility.Strict -> "strict"
+  )
 
   private def resolveDependencies(
       thirdparty: ThirdpartyConfig,
