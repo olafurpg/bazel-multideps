@@ -45,16 +45,21 @@ case class ExportCommand(
     useAnsiOutput: Boolean = Util.useAnsiOutput(),
     app: Application = Application.default
 ) extends Command {
+  def run(): Int = {
+    app.complete(runResult())
+  }
+  def runResult(): DecodingResult[Unit] = {
+    parseThirdpartyConfig().flatMap(t => runResult(t))
+  }
   def runResult(thirdparty: ThirdpartyConfig): DecodingResult[Unit] = {
-    val threads = new CoursierThreadPools()
-    val cache: FileCache[Task] = FileCache().noCredentials
-      .withCachePolicies(List(CachePolicy.FetchMissing))
-      .withPool(threads.downloadPool)
-      .withChecksums(Nil)
-      .withLocation(
-        app.env.workingDirectory.resolve("target").resolve("16cache").toFile
-      )
-    try {
+    withThreadPool[DecodingResult[Unit]] { threads =>
+      val cache: FileCache[Task] = FileCache().noCredentials
+        .withCachePolicies(List(CachePolicy.FetchMissing))
+        .withPool(threads.downloadPool)
+        .withChecksums(Nil)
+      // .withLocation(
+      //   app.env.workingDirectory.resolve("target").resolve("16cache").toFile
+      // )
       for {
         index <- resolveDependencies(thirdparty, cache)
         _ <- lintPostResolution(index)
@@ -67,18 +72,10 @@ case class ExportCommand(
           )
           .runResult()
       } yield lint
-    } finally {
-      threads.close()
     }
   }
-  def runResult(): DecodingResult[Unit] = {
-    parseThirdpartyConfig().flatMap(t => runResult(t))
-  }
-  def run(): Int = {
-    app.complete(runResult())
-  }
 
-  def parseThirdpartyConfig(): DecodingResult[ThirdpartyConfig] = {
+  private def parseThirdpartyConfig(): DecodingResult[ThirdpartyConfig] = {
     val configPath =
       app.env.workingDirectory.resolve("3rdparty.yaml")
     if (!Files.isRegularFile(configPath)) {
@@ -92,7 +89,7 @@ case class ExportCommand(
     }
   }
 
-  def resolveDependencies(
+  private def resolveDependencies(
       thirdparty: ThirdpartyConfig,
       cache: FileCache[Task]
   ): DecodingResult[ResolutionIndex] = {
@@ -113,40 +110,6 @@ case class ExportCommand(
       )
     } yield ResolutionIndex.fromResolutions(thirdparty, resolutions)
   }
-
-  private def withProgressBar[T](renderer: ProgressRenderer)(thunk: => T): T = {
-    val out = new PrintWriter(app.err)
-    val p =
-      if (useAnsiOutput)
-        new InteractiveProgressBar(
-          out = out,
-          renderer = renderer,
-          intervalDuration = Duration.ofMillis(100),
-          terminal = app.terminal
-        )
-      else {
-        new StaticProgressBar(
-          renderer = renderer,
-          out = out,
-          terminal = app.terminal
-        )
-      }
-    try {
-      p.start()
-      thunk
-    } finally {
-      p.stop()
-    }
-  }
-
-  private def runParallelTasks[T](
-      tasks: List[Task[T]],
-      r: ProgressRenderer,
-      ec: ExecutionContext
-  ): Seq[T] =
-    withProgressBar(r) {
-      Task.gather.gather(tasks).unsafeRun()(ec)
-    }
 
   def unifyDependencies(
       index: ResolutionIndex,
@@ -194,7 +157,6 @@ case class ExportCommand(
     }
   }
 
-  def lintPostGeneration(index: ResolutionIndex): Unit = {}
   def lintPostResolution(index: ResolutionIndex): DecodingResult[Unit] = {
     // return ValueResult(())
     val errors = for {
@@ -229,6 +191,45 @@ case class ExportCommand(
       case None => ValueResult(())
     }
   }
+
+  private def withThreadPool[T](fn: CoursierThreadPools => T): T = {
+    val threads = new CoursierThreadPools()
+    try fn(threads)
+    finally threads.close()
+  }
+  private def withProgressBar[T](renderer: ProgressRenderer)(thunk: => T): T = {
+    val out = new PrintWriter(app.err)
+    val p =
+      if (useAnsiOutput)
+        new InteractiveProgressBar(
+          out = out,
+          renderer = renderer,
+          intervalDuration = Duration.ofMillis(100),
+          terminal = app.terminal
+        )
+      else {
+        new StaticProgressBar(
+          renderer = renderer,
+          out = out,
+          terminal = app.terminal
+        )
+      }
+    try {
+      p.start()
+      thunk
+    } finally {
+      p.stop()
+    }
+  }
+
+  private def runParallelTasks[T](
+      tasks: List[Task[T]],
+      r: ProgressRenderer,
+      ec: ExecutionContext
+  ): Seq[T] =
+    withProgressBar(r) {
+      Task.gather.gather(tasks).unsafeRun()(ec)
+    }
 
 }
 
