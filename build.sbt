@@ -38,7 +38,7 @@ lazy val multideps = project
     moduleName := "bazel-multideps",
     mainClass.in(Compile, packageBin) := Some("multideps.Multideps"),
     mainClass.in(Compile) := Some("multideps.Multideps"),
-    // fork := true,
+    fork := true,
     javaOptions ++= List(
       "-Xmx8g",
       "-XX:+UseG1GC"

@@ -5,10 +5,13 @@ import java.{util => ju}
 import scala.collection.mutable
 
 import coursier.core.Dependency
+import coursier.error.ResolutionError
+import coursier.util.Task
 import moped.cli.Application
 import moped.json.DecodingResult
 import moped.json.ErrorResult
 import moped.json.ValueResult
+import moped.reporters.Diagnostic
 import moped.reporters.Reporter
 
 object MultidepsEnrichments {
@@ -58,6 +61,13 @@ object MultidepsEnrichments {
       }
       buf.toList
     }
+  }
+  implicit class XtensionTaskIO[T](t: Task[T]) {
+    def toDecodingResult: Task[DecodingResult[T]] =
+      t.map(ValueResult(_)).handle {
+        case ex: ResolutionError =>
+          ErrorResult(Diagnostic.error(ex.getMessage()))
+      }
   }
 
 }

@@ -29,7 +29,9 @@ final case class DependencyConfig(
     forceVersions: ForceVersionsConfig = ForceVersionsConfig(),
     modules: List[String] = Nil,
     lang: LanguagesConfig = JavaLanguagesConfig,
-    exports: List[String] = Nil
+    exports: List[String] = Nil,
+    targets: List[String] = Nil,
+    force: Boolean = false
 ) {
   def coursierModule(scalaVersion: VersionsConfig): Module = {
     val suffix = lang match {
@@ -65,6 +67,7 @@ final case class DependencyConfig(
         transitive = true
       )
     )
+
 }
 
 object DependencyConfig {

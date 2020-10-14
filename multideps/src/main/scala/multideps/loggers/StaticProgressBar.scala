@@ -1,8 +1,9 @@
 package multideps.loggers
 
+import java.io.Writer
+
 import moped.progressbars.ProgressBar
 import moped.progressbars.ProgressRenderer
-import java.io.Writer
 import moped.reporters.Terminals
 import org.typelevel.paiges.Doc
 

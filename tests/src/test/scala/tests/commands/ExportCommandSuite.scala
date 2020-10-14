@@ -1,7 +1,8 @@
 package tests.commands
 
-import moped.internal.console.Utils
 import java.nio.file.Paths
+
+import moped.internal.console.Utils
 
 class ExportCommandSuite extends tests.BaseSuite {
 
