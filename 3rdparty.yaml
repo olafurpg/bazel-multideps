@@ -1,11 +1,14 @@
 scala: 2.12.12
 dependencies:
+  - dependency: com.google.protobuf:protobuf-java:3.13.0
+  - dependency: com.google.protobuf:protobuf-java:2.6.1
   - dependency: com.google.guava:guava:24.1.1-jre
     crossVersions:
       - name: lsp4j
         version: 27.1-jre
       - name: latest
         version: 29.0-jre
+  # - dependency: org.scalameta:scalameta_2.12:4.3.24
   - dependency: org.eclipse.lsp4j:org.eclipse.lsp4j:0.9.0
     forceVersions:
       - com.google.guava:guava:default

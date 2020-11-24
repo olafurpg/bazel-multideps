@@ -38,7 +38,7 @@ lazy val multideps = project
     moduleName := "bazel-multideps",
     mainClass.in(Compile, packageBin) := Some("multideps.Multideps"),
     mainClass.in(Compile) := Some("multideps.Multideps"),
-    // fork := true,
+    fork := true,
     javaOptions ++= List(
       "-Xmx8g",
       "-XX:+UseG1GC"
@@ -46,6 +46,7 @@ lazy val multideps = project
     baseDirectory.in(run) := baseDirectory.in(ThisBuild).value,
     libraryDependencies ++= List(
       "io.get-coursier" %% "coursier" % "2.0.0",
+      "io.get-coursier" %% "versions" % "0.3.0",
       "org.scalameta" %% "moped" % V.moped,
       "org.scalameta" %% "moped-yaml" % V.moped,
       "com.lihaoyi" %% "os-lib" % "0.7.1",

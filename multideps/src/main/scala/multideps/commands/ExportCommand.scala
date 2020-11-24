@@ -5,9 +5,11 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
-import java.util.concurrent.atomic.AtomicInteger
 import java.{util => ju}
+import coursier.version.VersionCompatibility
 
+import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 import multideps.configs.ThirdpartyConfig
@@ -21,11 +23,8 @@ import multideps.resolvers.CoursierThreadPools
 import multideps.resolvers.ResolvedDependency
 import multideps.resolvers.Sha256
 
-import coursier.Resolve
 import coursier.cache.CachePolicy
 import coursier.cache.FileCache
-import coursier.error.ResolutionError
-import coursier.params.ResolutionParams
 import coursier.paths.Util
 import coursier.util.Task
 import moped.annotations.CommandName
@@ -37,28 +36,31 @@ import moped.json.DecodingResult
 import moped.json.ErrorResult
 import moped.json.ValueResult
 import moped.progressbars.InteractiveProgressBar
-import moped.progressbars.ProgressBar
+import moped.progressbars.ProgressRenderer
 import moped.reporters.Diagnostic
 import moped.reporters.Input
 import moped.reporters.NoPosition
-import moped.progressbars.ProgressRenderer
 
 @CommandName("export")
 case class ExportCommand(
     useAnsiOutput: Boolean = Util.useAnsiOutput(),
-    quiet: Boolean = false,
     app: Application = Application.default
 ) extends Command {
+  def run(): Int = {
+    app.complete(runResult())
+  }
+  def runResult(): DecodingResult[Unit] = {
+    parseThirdpartyConfig().flatMap(t => runResult(t))
+  }
   def runResult(thirdparty: ThirdpartyConfig): DecodingResult[Unit] = {
-    val threads = new CoursierThreadPools()
-    val cache: FileCache[Task] = FileCache().noCredentials
-      .withCachePolicies(List(CachePolicy.FetchMissing))
-      .withPool(threads.downloadPool)
-      .withChecksums(Nil)
-      .withLocation(
-        app.env.workingDirectory.resolve("target").resolve("16cache").toFile
-      )
-    try {
+    withThreadPool[DecodingResult[Unit]] { threads =>
+      val cache: FileCache[Task] = FileCache().noCredentials
+        .withCachePolicies(List(CachePolicy.FetchMissing))
+        .withPool(threads.downloadPool)
+        .withChecksums(Nil)
+      // .withLocation(
+      //   app.env.workingDirectory.resolve("target").resolve("16cache").toFile
+      // )
       for {
         index <- resolveDependencies(thirdparty, cache)
         _ <- lintPostResolution(index)
@@ -71,18 +73,10 @@ case class ExportCommand(
           )
           .runResult()
       } yield lint
-    } finally {
-      threads.close()
     }
   }
-  def runResult(): DecodingResult[Unit] = {
-    parseThirdpartyConfig().flatMap(t => runResult(t))
-  }
-  def run(): Int = {
-    app.complete(runResult())
-  }
 
-  def parseThirdpartyConfig(): DecodingResult[ThirdpartyConfig] = {
+  private def parseThirdpartyConfig(): DecodingResult[ThirdpartyConfig] = {
     val configPath =
       app.env.workingDirectory.resolve("3rdparty.yaml")
     if (!Files.isRegularFile(configPath)) {
@@ -96,148 +90,68 @@ case class ExportCommand(
     }
   }
 
-  def resolveDependencies(
+  private val schemes = Map[VersionCompatibility, String](
+    VersionCompatibility.Always -> "always",
+    VersionCompatibility.Default -> "default",
+    VersionCompatibility.EarlySemVer -> "early-semver",
+    VersionCompatibility.SemVerSpec -> "semver-spec",
+    VersionCompatibility.PackVer -> "pvp",
+    VersionCompatibility.Strict -> "strict"
+  )
+
+  private def resolveDependencies(
       thirdparty: ThirdpartyConfig,
       cache: FileCache[Task]
   ): DecodingResult[ResolutionIndex] = {
-    val counter = new AtomicInteger(0)
-    val N = thirdparty.dependencies.size
-    val coursierDeps = (for {
-      dep <- thirdparty.dependencies
-      cdep <- dep.coursierDependencies(thirdparty.scala)
-    } yield dep -> cdep).distinctBy(_._2)
-    val r = new ResolveProgressRenderer(coursierDeps.length)
-    val p = newProgressBar(r)
-    p.start()
-    val maxWidth =
-      if (coursierDeps.isEmpty) 0
-      else coursierDeps.map(_._2.repr.length()).max
-    val total = coursierDeps.length
-    try {
-      val resolves = coursierDeps.map {
-        case (dep, cdep) =>
-          val forceVersions = dep.forceVersions.overrides.map {
-            case (module, version) =>
-              thirdparty.depsByModule.get(module.coursierModule) match {
-                case Some(depsConfig) =>
-                  depsConfig.getVersion(version) match {
-                    case Some(forcedVersion) =>
-                      ValueResult(
-                        depsConfig.coursierModule(
-                          thirdparty.scala
-                        ) -> forcedVersion
-                      )
-                    case None =>
-                      // TODO: report "did you mean?"
-                      ErrorResult(
-                        Diagnostic.error(
-                          s"version '$version' not found",
-                          module.name.position
-                        )
-                      )
-                  }
-                case None =>
-                  ErrorResult(
-                    Diagnostic.error(
-                      s"module '${module.repr}' not found",
-                      module.name.position
-                    )
-                  )
-              }
-          }
-          for {
-            forceVersions <- DecodingResult.fromResults(forceVersions)
-          } yield Resolve(
-            cache.withLogger(r.loggers.newCacheLogger(cdep))
-          )
-            .addDependencies(cdep)
-            .withResolutionParams(
-              ResolutionParams().addForceVersion(forceVersions: _*)
-            )
-            .addRepositories(
-              thirdparty.repositories.flatMap(_.coursierRepository): _*
-            )
-      }
-
-      for {
-        rs <- DecodingResult.fromResults(resolves)
-        resolutions <- {
-          val tasks = rs.map(_.io.map(ValueResult(_)).handle {
-            case ex: ResolutionError =>
-              ErrorResult(Diagnostic.error(ex.getMessage()))
-          })
-          DecodingResult.fromResults(
-            Task.gather.gather(tasks).unsafeRun()(cache.ec)
-          )
-        }
-      } yield {
-        ResolutionIndex.fromResolutions(thirdparty, resolutions)
-      }
-    } finally {
-      p.stop()
+    val deps = thirdparty.coursierDeps
+    val progressBar = new ResolveProgressRenderer(deps.length)
+    val resolveResults = deps.map {
+      case (dep, cdep) =>
+        thirdparty.toResolve(dep, cache, progressBar, cdep)
     }
-  }
-
-  private def newProgressBar(renderer: ProgressRenderer): ProgressBar = {
-    val out = new PrintWriter(app.err)
-    if (useAnsiOutput)
-      new InteractiveProgressBar(
-        out = out,
-        renderer = renderer,
-        intervalDuration = Duration.ofMillis(100),
-        terminal = app.terminal
+    for {
+      resolves <- DecodingResult.fromResults(resolveResults)
+      resolutions <- DecodingResult.fromResults(
+        runParallelTasks(
+          resolves.map(_.io.toDecodingResult),
+          progressBar,
+          cache.ec
+        )
       )
-    else {
-      new StaticProgressBar(
-        renderer = renderer,
-        out = out,
-        terminal = app.terminal
-      )
-    }
+    } yield ResolutionIndex.fromResolutions(thirdparty, resolutions)
   }
 
   def unifyDependencies(
       index: ResolutionIndex,
       cache: FileCache[Task]
   ): DecodingResult[Path] = {
-    // Step 1: download artifacts
     val artifacts = index.resolutions
       .flatMap(_.dependencyArtifacts().map {
         case (d, p, a) => ResolvedDependency(d, p, a)
       })
       .distinctBy(_.dependency.repr)
     val outputs = new ju.HashMap[String, ArtifactOutput]
-    val counter = new AtomicInteger(0)
-    val N = artifacts.size
-    val pr = new DownloadProgressRenderer(artifacts.length)
-    val p = newProgressBar(pr)
-    p.start()
-    val all: Seq[Either[Throwable, ArtifactOutput]] =
-      try {
-        val files = artifacts.map { r =>
-          val logger = pr.loggers.newCacheLogger(r.dependency)
-          cache.withLogger(logger).file(r.artifact).run.map {
-            case Right(file) =>
-              Try {
-                import scala.collection.JavaConverters._
-                val output = ArtifactOutput(
-                  index = index,
-                  outputs = outputs.asScala,
-                  dependency = r.dependency,
-                  artifact = r.artifact,
-                  artifactSha256 = Sha256.compute(file)
-                )
-                outputs.put(r.dependency.repr, output)
-                output
-              }.toEither
+    val progressBar = new DownloadProgressRenderer(artifacts.length)
+    val files = artifacts.map { r =>
+      val logger = progressBar.loggers.newCacheLogger(r.dependency)
+      cache.withLogger(logger).file(r.artifact).run.map {
+        case Right(file) =>
+          Try {
+            val output = ArtifactOutput(
+              index = index,
+              outputs = outputs.asScala,
+              dependency = r.dependency,
+              artifact = r.artifact,
+              artifactSha256 = Sha256.compute(file)
+            )
+            outputs.put(r.dependency.repr, output)
+            output
+          }.toEither
 
-            case Left(value) => Left(value)
-          }
-        }
-        Task.gather.gather(files).unsafeRun()(cache.ec)
-      } finally {
-        p.stop()
+        case Left(value) => Left(value)
       }
+    }
+    val all = runParallelTasks(files, progressBar, cache.ec)
     val errors = all.collect { case Left(error) => Diagnostic.exception(error) }
     Diagnostic.fromDiagnostics(errors.toList) match {
       case Some(error) =>
@@ -253,16 +167,16 @@ case class ExportCommand(
     }
   }
 
-  def lintPostGeneration(index: ResolutionIndex): Unit = {}
   def lintPostResolution(index: ResolutionIndex): DecodingResult[Unit] = {
     // return ValueResult(())
     val errors = for {
       (module, versions) <- index.artifacts.toList
       if versions.size > 1
       diagnostic <- index.thirdparty.depsByModule.get(module) match {
-        case Some(declared) =>
+        case Some(declaredDeps) =>
+          val allDeclaredVersions = declaredDeps.flatMap(_.allVersions)
           val unspecified =
-            (versions.map(_.version) -- declared.allVersions).toList
+            (versions.map(_.version) -- allDeclaredVersions).toList
           unspecified match {
             case Nil =>
               Nil
@@ -271,22 +185,14 @@ case class ExportCommand(
                 new ConflictingTransitiveDependencyDiagnostic(
                   module,
                   unspecified.toList,
-                  declared.allVersions,
+                  allDeclaredVersions,
                   versions.iterator.flatMap(index.roots.get(_)).flatten.toList,
-                  declared.organization.position
+                  NoPosition
                 )
               )
           }
         case None =>
-          List(
-            new ConflictingTransitiveDependencyDiagnostic(
-              module,
-              versions.map(_.version).toList,
-              Nil,
-              versions.iterator.flatMap(index.roots.get(_)).flatten.toList,
-              NoPosition
-            )
-          )
+          Nil
       }
       if diagnostic.declaredVersions.nonEmpty
     } yield diagnostic
@@ -295,6 +201,45 @@ case class ExportCommand(
       case None => ValueResult(())
     }
   }
+
+  private def withThreadPool[T](fn: CoursierThreadPools => T): T = {
+    val threads = new CoursierThreadPools()
+    try fn(threads)
+    finally threads.close()
+  }
+  private def withProgressBar[T](renderer: ProgressRenderer)(thunk: => T): T = {
+    val out = new PrintWriter(app.err)
+    val p =
+      if (useAnsiOutput)
+        new InteractiveProgressBar(
+          out = out,
+          renderer = renderer,
+          intervalDuration = Duration.ofMillis(100),
+          terminal = app.terminal
+        )
+      else {
+        new StaticProgressBar(
+          renderer = renderer,
+          out = out,
+          terminal = app.terminal
+        )
+      }
+    try {
+      p.start()
+      thunk
+    } finally {
+      p.stop()
+    }
+  }
+
+  private def runParallelTasks[T](
+      tasks: List[Task[T]],
+      r: ProgressRenderer,
+      ec: ExecutionContext
+  ): Seq[T] =
+    withProgressBar(r) {
+      Task.gather.gather(tasks).unsafeRun()(ec)
+    }
 
 }
 

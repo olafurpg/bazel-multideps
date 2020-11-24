@@ -47,7 +47,7 @@ final case class PantsExportCommand(
       thirdparty <- runPantsImport()
       save <-
         save
-          .copy(useAnsiOutput = true, quiet = true)
+          .copy(useAnsiOutput = true)
           .runResult(thirdparty)
     } yield save
   }
